@@ -1425,6 +1425,29 @@ TOOL_DECLARATIONS = [
             "required": ["action"]
         }
     },
+    {
+        "name": "voice_switcher",
+        "description": (
+            "Switches JARVIS's voice or audio engine dynamically. "
+            "Supports switching between Gemini Live prebuilt voices (Charon, Puck, Fenrir) "
+            "and Free High-Definition Neural voices (Ryan MCU Jarvis, Christopher tactical, Thomas butler, Andrew, Brian). "
+            "Also lists all available voices across both engines."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "Action to perform: 'switch', 'list', or 'current'"
+                },
+                "voice": {
+                    "type": "STRING",
+                    "description": "Target voice or engine name (e.g. 'ryan', 'christopher', 'thomas', 'charon', 'neural', 'gemini')"
+                }
+            },
+            "required": ["action"]
+        }
+    },
 ]
 
 
@@ -1441,6 +1464,15 @@ class JarvisLive:
         self._speaking_lock = threading.Lock()
         self.ui.on_text_command = self._on_text_command
         self.ui.on_model_switch = self._on_model_switch
+        from core.voice_engine import get_voice_engine
+        get_voice_engine().set_reconnect_callback(self._on_voice_reconnect)
+
+    def _on_voice_reconnect(self):
+        if self._loop and self.session:
+            try:
+                asyncio.run_coroutine_threadsafe(self.session.close(), self._loop)
+            except Exception:
+                pass
 
     def _on_model_switch(self, new_model: str):
         global LIVE_MODEL
@@ -1498,6 +1530,25 @@ class JarvisLive:
         if any(kw in cmd_low for kw in ["dismiss privacy veil", "dismiss veil", "clear privacy veil", "clear veil"]):
             res = get_anti_shoulder_surfer().dismiss_veil()
             self.speak("Privacy veil dismissed, sir.")
+            return
+
+        # 2c. Check for Voice Switcher Commands
+        if any(cmd_low.startswith(pfx) for pfx in ["switch voice", "change voice", "set voice", "voice switch", "switch to voice"]):
+            target = cmd_low
+            for pfx in ["switch voice to", "switch voice", "change voice to", "change voice", "set voice to", "set voice", "switch to voice", "switch to"]:
+                if target.startswith(pfx):
+                    target = target[len(pfx):].strip()
+                    break
+            from actions.voice_switcher import voice_switcher_control
+            res = voice_switcher_control({"action": "switch", "voice": target}, player=self.ui)
+            self.speak(res)
+            return
+
+        if cmd_low in ["list voices", "show voices", "get voices", "available voices"]:
+            from actions.voice_switcher import voice_switcher_control
+            res = voice_switcher_control({"action": "list"}, player=self.ui)
+            self.ui.write_log(f"VOICE: {res}")
+            self.speak("Here are your available voices, sir. You can switch between Gemini Live Charon or Neural Edge Ryan, Christopher, and Thomas.")
             return
 
         # 3. Check for 3-Digit Destructive Confirmation Code
@@ -1566,6 +1617,14 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
 
     def speak(self, text: str):
+        if not text or not str(text).strip():
+            return
+        from core.voice_engine import get_voice_engine
+        ve = get_voice_engine()
+        if ve.active_engine == "edge_neural":
+            ve.speak_neural(str(text), player=self.ui)
+            return
+
         if not self._loop or not self.session:
             return
         asyncio.run_coroutine_threadsafe(
@@ -1590,22 +1649,25 @@ class JarvisLive:
 
         # Load user settings
         settings_path = BASE_DIR / "config" / "jarvis_settings.json"
-        voice_name = "Charon"
+        from core.voice_engine import get_voice_engine
+        ve = get_voice_engine()
+        ve.load_settings()
+        voice_name = ve.active_gemini_voice or "Charon"
         settings_ctx = ""
         try:
             if settings_path.exists():
                 settings = json.loads(settings_path.read_text(encoding="utf-8"))
-                voice_name = settings.get("voice_name", "Charon")
-                if not voice_name or voice_name.lower() in ("default", "none"):
-                    voice_name = "Charon"
                 user_name = settings.get("user_name", "")
                 addr = settings.get("address_style", "sir")
                 personality = settings.get("personality", "professional")
+                active_eng = ve.active_engine
+                active_v_display = ve.active_edge_voice if active_eng == "edge_neural" else voice_name
                 settings_ctx = (
                     f"[USER PREFERENCES]\n"
                     f"User's name: {user_name}\n"
                     f"Address them as: {addr}\n"
                     f"Personality mode: {personality}\n"
+                    f"Active Voice Engine: {active_eng} ({active_v_display})\n"
                     f"Default browser: {settings.get('default_browser', 'chrome')}\n\n"
                 )
         except Exception:
@@ -1944,6 +2006,11 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: execute_voice_macro(parameters=args, player=self.ui))
                 result = r or "Voice macro executed."
 
+            elif name == "voice_switcher":
+                from actions.voice_switcher import voice_switcher_control
+                r = await loop.run_in_executor(None, lambda: voice_switcher_control(parameters=args, player=self.ui))
+                result = r or "Voice switch executed."
+
             elif name == "remote_bridge":
                 r = await loop.run_in_executor(None, lambda: remote_bridge_control(parameters=args, player=self.ui))
                 result = r or "Remote bridge started."
@@ -2128,10 +2195,16 @@ class JarvisLive:
                 async for response in self.session.receive():
 
                     if response.data:
-                        self.audio_in_queue.put_nowait(response.data)
+                        from core.voice_engine import get_voice_engine
+                        if get_voice_engine().active_engine == "gemini_live":
+                            self.audio_in_queue.put_nowait(response.data)
 
                     if response.server_content:
                         sc = response.server_content
+
+                        if getattr(sc, "interrupted", False):
+                            from core.voice_engine import get_voice_engine
+                            get_voice_engine().stop()
 
                         if sc.output_transcription and sc.output_transcription.text:
                             self.set_speaking(True)
@@ -2155,6 +2228,9 @@ class JarvisLive:
                             full_out = " ".join(out_buf).strip()
                             if full_out:
                                 self.ui.write_log(f"Jarvis: {full_out}")
+                                from core.voice_engine import get_voice_engine
+                                if get_voice_engine().active_engine == "edge_neural":
+                                    get_voice_engine().speak_neural(full_out, player=self.ui)
                             out_buf = []
 
                             try:

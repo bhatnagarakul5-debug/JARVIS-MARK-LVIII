@@ -212,7 +212,8 @@ def set_personality(parameters: dict, player=None) -> str:
             data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
         
         data["personality"] = mode
-        data["voice_name"]  = "Charon"  # PERMANENT VOICE LOCK
+        if "voice_name" not in data:
+            data["voice_name"]  = "Charon"
         data["address_style"] = preset["address"]
         SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
