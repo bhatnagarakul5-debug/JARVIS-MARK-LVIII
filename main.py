@@ -1428,21 +1428,46 @@ TOOL_DECLARATIONS = [
     {
         "name": "voice_switcher",
         "description": (
-            "Switches JARVIS's voice or audio engine dynamically. "
-            "Supports switching between Gemini Live prebuilt voices (Charon, Puck, Fenrir) "
-            "and Free High-Definition Neural voices (Ryan MCU Jarvis, Christopher tactical, Thomas butler, Andrew, Brian). "
-            "Also lists all available voices across both engines."
+            "Switches JARVIS's voice or audio engine dynamically, or tunes the 6-Stage Ultron DSP FX rack. "
+            "Supports Ultron (Voice ID: 5HUn8o1WOpG7RxvghslS with 6-stage DSP: Pitch -1.5 semitones, "
+            "Bass slight boost, Metallic resonance subtle, Reverb very light, Compression moderate, Stereo doubling very subtle), "
+            "Gemini Live prebuilt voices (Charon, Puck, Fenrir), "
+            "and Free High-Definition Neural voices (Ryan MCU Jarvis, Christopher tactical, Thomas butler, Andrew, Brian)."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "action": {
                     "type": "STRING",
-                    "description": "Action to perform: 'switch', 'list', or 'current'"
+                    "description": "Action to perform: 'switch', 'list', 'current', or 'dsp'"
                 },
                 "voice": {
                     "type": "STRING",
-                    "description": "Target voice or engine name (e.g. 'ryan', 'christopher', 'thomas', 'charon', 'neural', 'gemini')"
+                    "description": "Target voice or ID (e.g. 'ultron', '5HUn8o1WOpG7RxvghslS', 'ryan', 'christopher', 'thomas', 'charon')"
+                },
+                "pitch_semitones": {
+                    "type": "NUMBER",
+                    "description": "Pitch shift in semitones (default -1.5, range -1 to -2 semitones)"
+                },
+                "bass_boost_db": {
+                    "type": "NUMBER",
+                    "description": "Bass shelf boost in dB (default 3.5 — Slight boost)"
+                },
+                "metallic_resonance": {
+                    "type": "NUMBER",
+                    "description": "Metallic resonance wet amount (default 0.14 — Subtle)"
+                },
+                "reverb_mix": {
+                    "type": "NUMBER",
+                    "description": "Reverb wet mix (default 0.08 — Very light)"
+                },
+                "compression_ratio": {
+                    "type": "NUMBER",
+                    "description": "Dynamic compression ratio (default 3.2 — Moderate)"
+                },
+                "stereo_doubling": {
+                    "type": "NUMBER",
+                    "description": "Stereo doubling wet amount (default 0.11 — Very subtle)"
                 }
             },
             "required": ["action"]
@@ -1532,13 +1557,16 @@ class JarvisLive:
             self.speak("Privacy veil dismissed, sir.")
             return
 
-        # 2c. Check for Voice Switcher Commands
-        if any(cmd_low.startswith(pfx) for pfx in ["switch voice", "change voice", "set voice", "voice switch", "switch to voice"]):
+        # 2c. Check for Voice Switcher & Ultron DSP Commands
+        if any(cmd_low.startswith(pfx) for pfx in ["switch voice", "change voice", "set voice", "voice switch", "switch to voice", "ultron voice", "activate ultron voice"]):
             target = cmd_low
-            for pfx in ["switch voice to", "switch voice", "change voice to", "change voice", "set voice to", "set voice", "switch to voice", "switch to"]:
-                if target.startswith(pfx):
-                    target = target[len(pfx):].strip()
-                    break
+            if "ultron" in target or "5hun8o1wopg7rxvghsls" in target:
+                target = "ultron"
+            else:
+                for pfx in ["switch voice to", "switch voice", "change voice to", "change voice", "set voice to", "set voice", "switch to voice", "switch to"]:
+                    if target.startswith(pfx):
+                        target = target[len(pfx):].strip()
+                        break
             from actions.voice_switcher import voice_switcher_control
             res = voice_switcher_control({"action": "switch", "voice": target}, player=self.ui)
             self.speak(res)
@@ -1548,7 +1576,7 @@ class JarvisLive:
             from actions.voice_switcher import voice_switcher_control
             res = voice_switcher_control({"action": "list"}, player=self.ui)
             self.ui.write_log(f"VOICE: {res}")
-            self.speak("Here are your available voices, sir. You can switch between Gemini Live Charon or Neural Edge Ryan, Christopher, and Thomas.")
+            self.speak("Here are your available voices, sir. You can switch between Ultron with 6-stage DSP, Gemini Live Charon, or Neural Edge Ryan, Christopher, and Thomas.")
             return
 
         # 3. Check for 3-Digit Destructive Confirmation Code
