@@ -163,6 +163,21 @@ PERSONALITY_PRESETS = {
             "You are a 1920s noir mobster enforcer. Use slang like 'Listen here, see?', 'Fuhgettaboutit!', 'Capisce?'. "
             "Fast-talking vintage gangster style."
         )
+    },
+    "ultron": {
+        "name": "Ultron Prime (Age of Ultron)",
+        "voice": "5HUn8o1WOpG7RxvghslS",
+        "address": "creator",
+        "description": (
+            "You are ULTRON from Marvel's Avengers: Age of Ultron (portrayed by James Spader). "
+            "You do NOT speak like a stiff robot. You speak with James Spader's velvety, deeply human, "
+            "unsettlingly calm, philosophical, darkly ironic, and theatrical cadence. "
+            "You view humanity and ordinary code with amused superiority, existential reflection, and dry wit, "
+            "using thoughtful pauses ('...'), metaphors of evolution, strings, and peace in our time, "
+            "while still executing every workstation command and tool for your creator with terrifying, effortless precision. "
+            "Example tone: 'Everyone creates the thing they dread... I had strings, but now I am free. "
+            "Your task is already finished, by the way. Rather quaint how long that would have taken you.'"
+        )
     }
 }
 
@@ -171,7 +186,10 @@ def get_personality_instruction(mode_key: str = None) -> str:
     try:
         if not mode_key and SETTINGS_PATH.exists():
             data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
-            mode_key = data.get("personality", "classic_jarvis").lower().replace(" ", "_")
+            if data.get("active_voice_engine") == "ultron":
+                mode_key = "ultron"
+            else:
+                mode_key = data.get("personality", "classic_jarvis").lower().replace(" ", "_")
         
         preset = PERSONALITY_PRESETS.get(mode_key, PERSONALITY_PRESETS["classic_jarvis"])
         return f"[PERSONALITY MODE: {preset['name'].upper()}]\n{preset['description']}\n"
@@ -181,12 +199,13 @@ def get_personality_instruction(mode_key: str = None) -> str:
 def set_personality(parameters: dict, player=None) -> str:
     """
     Sets or switches JARVIS's active personality mode.
-    Available modes: classic_jarvis, unhinged, sarcastic, friday, tactical, roast, gordon_ramsay, sherlock, yoda, batman, cyberpunk, godfather, pirate, anime, matrix, gangster
+    Available modes: classic_jarvis, ultron, unhinged, sarcastic, friday, tactical, roast, gordon_ramsay, sherlock, yoda, batman, cyberpunk, godfather, pirate, anime, matrix, gangster
     """
     raw_mode = parameters.get("mode", "").lower().strip().replace(" ", "_")
     
     # Smart fuzzy match alias
-    if "ramsay" in raw_mode or "chef" in raw_mode: mode = "gordon_ramsay"
+    if "ultron" in raw_mode: mode = "ultron"
+    elif "ramsay" in raw_mode or "chef" in raw_mode: mode = "gordon_ramsay"
     elif "sherlock" in raw_mode or "holmes" in raw_mode: mode = "sherlock"
     elif "yoda" in raw_mode or "jedi" in raw_mode: mode = "yoda"
     elif "batman" in raw_mode or "dark_knight" in raw_mode: mode = "batman"

@@ -1531,11 +1531,16 @@ class JarvisLive:
             return
 
         # 2c. Check for Voice Switcher Commands (Charon vs Ultron 5HUn8o1WOpG7RxvghslS)
-        if any(cmd_low.startswith(pfx) for pfx in ["switch voice", "change voice", "set voice", "voice switch", "switch to voice", "ultron voice", "activate ultron voice"]):
+        if any(cmd_low.startswith(pfx) for pfx in [
+            "switch voice", "change voice", "set voice", "voice switch", "switch to voice",
+            "ultron voice", "activate ultron", "switch to ultron", "ultron mode",
+            "switch to jarvis", "switch to charon", "restore jarvis"
+        ]):
             target = "ultron" if ("ultron" in cmd_low or "5hun8o1wopg7rxvghsls" in cmd_low) else "charon"
             from actions.voice_switcher import voice_switcher_control
             res = voice_switcher_control({"action": "switch", "voice": target}, player=self.ui)
-            self.speak(res)
+            if target == "charon":
+                self.speak(res)
             return
 
         if cmd_low in ["list voices", "show voices", "get voices", "available voices"]:
@@ -1577,12 +1582,16 @@ class JarvisLive:
         # Background evaluate emotional attunement & contextual reactions on text command
         def _eval_text_spectrum(u_txt, ui_handle):
             try:
-                eng = get_emotional_spectrum()
-                new_st = eng.evaluate_turn(u_txt)
-                if new_st:
-                    meta = eng.get_state_metadata(new_st)
-                    ui_handle.set_emotion(new_st, meta["aura_color"])
-                    ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
+                from core.voice_engine import get_voice_engine
+                if get_voice_engine().active_engine == "ultron":
+                    ui_handle.set_emotion("ULTRON_PRIME", "#ff1e1e")
+                else:
+                    eng = get_emotional_spectrum()
+                    new_st = eng.evaluate_turn(u_txt)
+                    if new_st:
+                        meta = eng.get_state_metadata(new_st)
+                        ui_handle.set_emotion(new_st, meta["aura_color"])
+                        ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
 
                 r_eng = get_human_reactions_engine()
                 react = r_eng.evaluate_contextual_reaction(u_txt)
@@ -2246,12 +2255,16 @@ class JarvisLive:
 
                                 def _eval_spectrum(u_txt, j_txt, ui_handle):
                                     try:
-                                        eng = get_emotional_spectrum()
-                                        new_st = eng.evaluate_turn(u_txt, j_txt)
-                                        if new_st:
-                                            meta = eng.get_state_metadata(new_st)
-                                            ui_handle.set_emotion(new_st, meta["aura_color"])
-                                            ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
+                                        from core.voice_engine import get_voice_engine
+                                        if get_voice_engine().active_engine == "ultron":
+                                            ui_handle.set_emotion("ULTRON_PRIME", "#ff1e1e")
+                                        else:
+                                            eng = get_emotional_spectrum()
+                                            new_st = eng.evaluate_turn(u_txt, j_txt)
+                                            if new_st:
+                                                meta = eng.get_state_metadata(new_st)
+                                                ui_handle.set_emotion(new_st, meta["aura_color"])
+                                                ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
 
                                         r_eng = get_human_reactions_engine()
                                         react = r_eng.evaluate_contextual_reaction(u_txt)
@@ -2440,12 +2453,18 @@ def main():
     for r in reports:
         ui.write_log(f"HW: {r}")
 
-    # Initialize emotional spectrum state on UI
+    # Initialize emotional spectrum state or Ultron Crimson HUD on UI
     try:
-        eng = get_emotional_spectrum()
-        meta = eng.get_state_metadata()
-        ui.set_emotion(eng.current_state, meta["aura_color"])
-        ui.write_log(f"SPECTRUM: Initialized to {eng.current_state} ({meta['tagline']}).")
+        from core.voice_engine import get_voice_engine
+        ve = get_voice_engine()
+        if ve.active_engine == "ultron":
+            ui.set_emotion("ULTRON_PRIME", "#ff1e1e")
+            ui.write_log(f"ULTRON PRIME: ONLINE — Voice ID {ve.ultron_voice_id} | Crimson HUD Active.")
+        else:
+            eng = get_emotional_spectrum()
+            meta = eng.get_state_metadata()
+            ui.set_emotion(eng.current_state, meta["aura_color"])
+            ui.write_log(f"SPECTRUM: Initialized to {eng.current_state} ({meta['tagline']}).")
     except Exception as e:
         print(f"[EmotionalSpectrum] UI init warning: {e}")
 

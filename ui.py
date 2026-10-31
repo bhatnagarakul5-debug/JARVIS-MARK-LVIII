@@ -555,6 +555,7 @@ class HudCanvas(QWidget):
                 "CONCERNED": C.EMO_CONCERNED,
                 "INDIGNANT": C.EMO_INDIGNANT,
                 "COLD": C.EMO_COLD,
+                "ULTRON_PRIME": "#ff1e1e",
             }
             color_hex = palette.get(self.emotion, C.PRI)
         c = QColor(color_hex)
@@ -680,8 +681,9 @@ class HudCanvas(QWidget):
                 p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
             p.setPen(QPen(self.get_aura_color(min(255, int(self._halo * 2))), 1))
             p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
+            core_title = "U.L.T.R.O.N" if "ULTRON" in self.emotion else "J.A.R.V.I.S"
             p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, "J.A.R.V.I.S")
+                       Qt.AlignmentFlag.AlignCenter, core_title)
 
         # particles
         for pt in self._particles:
