@@ -1428,46 +1428,19 @@ TOOL_DECLARATIONS = [
     {
         "name": "voice_switcher",
         "description": (
-            "Switches JARVIS's voice or audio engine dynamically, or tunes the 6-Stage Ultron DSP FX rack. "
-            "Supports Ultron (Voice ID: 5HUn8o1WOpG7RxvghslS with 6-stage DSP: Pitch -1.5 semitones, "
-            "Bass slight boost, Metallic resonance subtle, Reverb very light, Compression moderate, Stereo doubling very subtle), "
-            "Gemini Live prebuilt voices (Charon, Puck, Fenrir), "
-            "and Free High-Definition Neural voices (Ryan MCU Jarvis, Christopher tactical, Thomas butler, Andrew, Brian)."
+            "Switches JARVIS's voice between Charon (Default Gemini Live voice) "
+            "and Ultron (Voice ID: 5HUn8o1WOpG7RxvghslS)."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "action": {
                     "type": "STRING",
-                    "description": "Action to perform: 'switch', 'list', 'current', or 'dsp'"
+                    "description": "Action to perform: 'switch', 'list', or 'current'"
                 },
                 "voice": {
                     "type": "STRING",
-                    "description": "Target voice or ID (e.g. 'ultron', '5HUn8o1WOpG7RxvghslS', 'ryan', 'christopher', 'thomas', 'charon')"
-                },
-                "pitch_semitones": {
-                    "type": "NUMBER",
-                    "description": "Pitch shift in semitones (default -1.5, range -1 to -2 semitones)"
-                },
-                "bass_boost_db": {
-                    "type": "NUMBER",
-                    "description": "Bass shelf boost in dB (default 3.5 — Slight boost)"
-                },
-                "metallic_resonance": {
-                    "type": "NUMBER",
-                    "description": "Metallic resonance wet amount (default 0.14 — Subtle)"
-                },
-                "reverb_mix": {
-                    "type": "NUMBER",
-                    "description": "Reverb wet mix (default 0.08 — Very light)"
-                },
-                "compression_ratio": {
-                    "type": "NUMBER",
-                    "description": "Dynamic compression ratio (default 3.2 — Moderate)"
-                },
-                "stereo_doubling": {
-                    "type": "NUMBER",
-                    "description": "Stereo doubling wet amount (default 0.11 — Very subtle)"
+                    "description": "Target voice: 'ultron' (5HUn8o1WOpG7RxvghslS) or 'charon'"
                 }
             },
             "required": ["action"]
@@ -1557,16 +1530,9 @@ class JarvisLive:
             self.speak("Privacy veil dismissed, sir.")
             return
 
-        # 2c. Check for Voice Switcher & Ultron DSP Commands
+        # 2c. Check for Voice Switcher Commands (Charon vs Ultron 5HUn8o1WOpG7RxvghslS)
         if any(cmd_low.startswith(pfx) for pfx in ["switch voice", "change voice", "set voice", "voice switch", "switch to voice", "ultron voice", "activate ultron voice"]):
-            target = cmd_low
-            if "ultron" in target or "5hun8o1wopg7rxvghsls" in target:
-                target = "ultron"
-            else:
-                for pfx in ["switch voice to", "switch voice", "change voice to", "change voice", "set voice to", "set voice", "switch to voice", "switch to"]:
-                    if target.startswith(pfx):
-                        target = target[len(pfx):].strip()
-                        break
+            target = "ultron" if ("ultron" in cmd_low or "5hun8o1wopg7rxvghsls" in cmd_low) else "charon"
             from actions.voice_switcher import voice_switcher_control
             res = voice_switcher_control({"action": "switch", "voice": target}, player=self.ui)
             self.speak(res)
@@ -1576,7 +1542,7 @@ class JarvisLive:
             from actions.voice_switcher import voice_switcher_control
             res = voice_switcher_control({"action": "list"}, player=self.ui)
             self.ui.write_log(f"VOICE: {res}")
-            self.speak("Here are your available voices, sir. You can switch between Ultron with 6-stage DSP, Gemini Live Charon, or Neural Edge Ryan, Christopher, and Thomas.")
+            self.speak("Available voices are Charon and Ultron.")
             return
 
         # 3. Check for 3-Digit Destructive Confirmation Code
@@ -1649,8 +1615,8 @@ class JarvisLive:
             return
         from core.voice_engine import get_voice_engine
         ve = get_voice_engine()
-        if ve.active_engine == "edge_neural":
-            ve.speak_neural(str(text), player=self.ui)
+        if ve.active_engine == "ultron":
+            ve.speak_ultron(str(text), player=self.ui)
             return
 
         if not self._loop or not self.session:
@@ -1689,13 +1655,13 @@ class JarvisLive:
                 addr = settings.get("address_style", "sir")
                 personality = settings.get("personality", "professional")
                 active_eng = ve.active_engine
-                active_v_display = ve.active_edge_voice if active_eng == "edge_neural" else voice_name
+                active_v_display = f"Ultron ({ve.ultron_voice_id})" if active_eng == "ultron" else voice_name
                 settings_ctx = (
                     f"[USER PREFERENCES]\n"
                     f"User's name: {user_name}\n"
                     f"Address them as: {addr}\n"
                     f"Personality mode: {personality}\n"
-                    f"Active Voice Engine: {active_eng} ({active_v_display})\n"
+                    f"Active Voice: {active_v_display}\n"
                     f"Default browser: {settings.get('default_browser', 'chrome')}\n\n"
                 )
         except Exception:
@@ -2257,8 +2223,8 @@ class JarvisLive:
                             if full_out:
                                 self.ui.write_log(f"Jarvis: {full_out}")
                                 from core.voice_engine import get_voice_engine
-                                if get_voice_engine().active_engine == "edge_neural":
-                                    get_voice_engine().speak_neural(full_out, player=self.ui)
+                                if get_voice_engine().active_engine == "ultron":
+                                    get_voice_engine().speak_ultron(full_out, player=self.ui)
                             out_buf = []
 
                             try:
