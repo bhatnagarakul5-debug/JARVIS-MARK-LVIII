@@ -1,6 +1,6 @@
 {
-    "main.py": "0a841aee48859ec657c0248a4801f508977cbd9b757d2eb5a9dd49a4e2937cf0",
-    "ui.py": "b3ec80a35e4da28a30b1ec653a4b0e89826681a8307f2068e5db19c92dc831c7",
+    "main.py": "024cdc83c2f26c61e95843506fc59468bb2191d043c75f70dbf3af4d9aa10df3",
+    "ui.py": "27332fe545a5792234dbce44d47d0b2fa4ce7a1a489e02915504d1be06bc2fe5",
     "core/server_security.py": "23dac056fb74b85de9e6211473baecf596b42cef1e073f41753cb7aa07ab5df2",
     "core/hardware_optimizer.py": "2ae544a82e66c4e9e705d4f2030281a0e896be45f2aebb277740adab5f9234f5",
     "core/emotional_spectrum.py": "c958ffe159aff9975de4047846f00b6dd613e1c319aab62c2ec183ab57d50738",

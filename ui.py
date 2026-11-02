@@ -111,7 +111,7 @@ class _SysMetrics:
                 self._update()
             except Exception:
                 pass
-            time.sleep(1.5)
+            time.sleep(3.5)
 
     def _update(self):
         cpu = psutil.cpu_percent(interval=None)
@@ -142,7 +142,7 @@ class _SysMetrics:
 
     def _get_gpu(self) -> float:
         now = time.time()
-        if now - self._last_gpu_t < 10.0 and self._cached_gpu != -1.0:
+        if now - self._last_gpu_t < 30.0 and self._cached_gpu != -1.0:
             return self._cached_gpu
         val = self._query_gpu()
         self._cached_gpu = val
@@ -252,7 +252,7 @@ class _SysMetrics:
 
     def _get_temp(self) -> float:
         now = time.time()
-        if now - self._last_tmp_t < 10.0 and self._cached_tmp != -1.0:
+        if now - self._last_tmp_t < 30.0 and self._cached_tmp != -1.0:
             return self._cached_tmp
         val = self._query_temp()
         self._cached_tmp = val
@@ -355,11 +355,11 @@ class HudCanvas(QWidget):
         self._gesture_offset_y: float = 0.0
         self._gesture_tilt_deg: float = 0.0
         self._gesture_scale_mod: float = 1.0
-        self._fps: int = 60
+        self._fps: int = 28
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
-        self._tmr.start(16)
+        self._tmr.start(35)
 
     def set_fps(self, fps: int):
         """Dynamically adjusts HUD render interval for hardware equilibrium & thermal management."""
@@ -555,7 +555,6 @@ class HudCanvas(QWidget):
                 "CONCERNED": C.EMO_CONCERNED,
                 "INDIGNANT": C.EMO_INDIGNANT,
                 "COLD": C.EMO_COLD,
-                "ULTRON_PRIME": "#ff1e1e",
             }
             color_hex = palette.get(self.emotion, C.PRI)
         c = QColor(color_hex)
@@ -578,74 +577,22 @@ class HudCanvas(QWidget):
             p.rotate(self._gesture_tilt_deg)
             p.translate(-cx, -cy)
 
-        # grid dots
-        p.setPen(QPen(qcol(C.PRI_GHO), 1))
-        for x in range(0, W, 48):
-            for y in range(0, H, 48):
-                p.drawPoint(x, y)
-
+        # Clean Minimalist Aura Glow (Subtle & Calm)
         r_face = fw * 0.31
-
-        # halo glow
-        for i in range(10):
-            r   = r_face * (1.8 - i * 0.08)
-            frc = 1.0 - i / 10
-            a   = max(0, min(255, int(self._halo * 0.085 * frc)))
+        for i in range(3):
+            r   = r_face * (1.36 - i * 0.12)
+            frc = 1.0 - i / 3.0
+            a   = max(0, min(255, int(self._halo * 0.11 * frc)))
             col = self.get_aura_color(a)
             p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
-        # pulse rings
-        for pr in self._pulses:
-            a   = max(0, int(230 * (1.0 - pr / (fw * 0.74))))
-            col = self.get_aura_color(a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - pr, cy - pr, pr * 2, pr * 2))
-
-        # spinning arc rings
-        for idx, (r_frac, w_r, arc_l, gap) in enumerate(
-            [(0.48, 3, 115, 78), (0.40, 2, 78, 55), (0.32, 1, 56, 40)]
-        ):
-            ring_r = fw * r_frac
-            base   = self._rings[idx]
-            a_val  = max(0, min(255, int(self._halo * (1.0 - idx * 0.18))))
-            col    = self.get_aura_color(a_val)
-            p.setPen(QPen(col, w_r)); p.setBrush(Qt.BrushStyle.NoBrush)
-            angle = base
-            rect  = QRectF(cx - ring_r, cy - ring_r, ring_r * 2, ring_r * 2)
-            while angle < base + 360:
-                p.drawArc(rect, int(angle * 16), int(arc_l * 16))
-                angle += arc_l + gap
-
-        # scanners
-        sr = fw * 0.50
-        sa = min(255, int(self._halo * 1.5))
-        ex = 75 if self.speaking else 44
-        p.setPen(QPen(self.get_aura_color(sa), 2.5))
+        # Single Subtle Orbit Ring
+        orbit_r = fw * 0.42
+        orbit_a = max(0, min(160, int(self._halo * 0.4)))
+        p.setPen(QPen(self.get_aura_color(orbit_a), 1.2))
         p.setBrush(Qt.BrushStyle.NoBrush)
-        srect = QRectF(cx - sr, cy - sr, sr * 2, sr * 2)
-        p.drawArc(srect, int(self._scan * 16), int(ex * 16))
-        p.setPen(QPen(qcol(C.ACC, sa // 2), 1.5))
-        p.drawArc(srect, int(self._scan2 * 16), int(ex * 16))
-
-        # tick marks
-        t_out, t_in = fw * 0.497, fw * 0.474
-        p.setPen(QPen(self.get_aura_color(140), 1))
-        for deg in range(0, 360, 10):
-            rad = math.radians(deg)
-            inn = t_in if deg % 30 == 0 else t_in + 6
-            p.drawLine(
-                QPointF(cx + t_out * math.cos(rad), cy - t_out * math.sin(rad)),
-                QPointF(cx + inn  * math.cos(rad), cy - inn  * math.sin(rad)),
-            )
-
-        # crosshair
-        ch_r, gap_h = fw * 0.51, fw * 0.16
-        p.setPen(QPen(self.get_aura_color(int(self._halo * 0.5)), 1))
-        p.drawLine(QPointF(cx - ch_r, cy), QPointF(cx - gap_h, cy))
-        p.drawLine(QPointF(cx + gap_h, cy), QPointF(cx + ch_r, cy))
-        p.drawLine(QPointF(cx, cy - ch_r), QPointF(cx, cy - gap_h))
-        p.drawLine(QPointF(cx, cy + gap_h), QPointF(cx, cy + ch_r))
+        p.drawEllipse(QRectF(cx - orbit_r, cy - orbit_r, orbit_r * 2, orbit_r * 2))
 
         # corner brackets
         bl = 24
@@ -681,9 +628,8 @@ class HudCanvas(QWidget):
                 p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
             p.setPen(QPen(self.get_aura_color(min(255, int(self._halo * 2))), 1))
             p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
-            core_title = "U.L.T.R.O.N" if "ULTRON" in self.emotion else "J.A.R.V.I.S"
             p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, core_title)
+                       Qt.AlignmentFlag.AlignCenter, "J.A.R.V.I.S")
 
         # particles
         for pt in self._particles:
@@ -715,35 +661,28 @@ class HudCanvas(QWidget):
         p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
 
-        # 32-Bar High-Definition Glass Equalizer Visualizer
+        # 16-Bar Clean Harmonic Visualizer (Calm & Soothing)
         wy = sy + 32
-        N, bw = 32, 9
+        N, bw = 16, 12
         wx0 = (W - N * bw) / 2
-        
         for i in range(N):
             if self.muted:
                 hgt, cl = 3, qcol(C.RED)
             elif self.speaking:
-                hgt = random.randint(4, 28)
-                cl  = self.get_aura_color(255) if hgt > 16 else qcol(C.GREEN)
+                hgt = int(5 + 12 * abs(math.sin(self._tick * 0.16 + i * 0.35)))
+                cl  = self.get_aura_color(220)
             elif self.state == "THINKING":
-                hgt = int(8 + 6 * math.sin(self._tick * 0.15 + i * 0.4))
+                hgt = int(4 + 5 * abs(math.sin(self._tick * 0.10 + i * 0.3)))
                 cl  = qcol(C.ACC2)
             else:
-                hgt = int(4 + 4 * math.sin(self._tick * 0.08 + i * 0.5))
+                hgt = int(3 + 2.5 * abs(math.sin(self._tick * 0.04 + i * 0.4)))
                 cl  = qcol(C.BORDER_B)
 
-            # Glass Bar Fill
-            bar_rect = QRectF(wx0 + i * bw, wy + 30 - hgt, bw - 2, hgt)
+            # Clean Rounded Bar
+            bar_rect = QRectF(wx0 + i * bw, wy + 26 - hgt, bw - 3, hgt)
             p.setBrush(QBrush(cl))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(bar_rect, 2, 2)
-
-            # Glowing Peak Indicator Dot
-            if hgt > 8:
-                peak_y = wy + 30 - hgt - 3
-                p.setBrush(QBrush(qcol(C.WHITE if self.speaking else C.PRI)))
-                p.drawEllipse(QPointF(wx0 + i * bw + (bw - 2) / 2, peak_y), 1.5, 1.5)
 
         # Emotional Spectrum & Gesture Telemetry Indicators
         badge_y = wy + 42
@@ -2965,4 +2904,4 @@ class JarvisUI:
 
     def dismiss_privacy_veil(self):
         """Manually dismisses the privacy veil."""
-        self._win._dismiss_privacy_veil()
+        self._win._dismiss_privacy_veil()

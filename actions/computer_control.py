@@ -9,6 +9,15 @@ import time
 import random
 from pathlib import Path
 
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 try:
     import pyautogui
     pyautogui.FAILSAFE = True
@@ -291,33 +300,19 @@ def _focus_window(title: str) -> str:
             return f"focus_window (Linux) failed: {e}"
 
     return f"focus_window: unknown OS '{os_name}'"
-def _screen_find(description: str) -> tuple[int, int] | None:
+def _screen_find(description: str, app: str | None = None) -> dict | None:
+    """Finds UI element using agent-desktop native accessibility tree."""
     try:
-        import base64
-        from or_client import client
-
-        _require_pyautogui()
-        w, h  = pyautogui.size()
-        img   = pyautogui.screenshot()
-        buf   = io.BytesIO()
-        img.save(buf, format="PNG")
-        b64 = base64.b64encode(buf.getvalue()).decode()
-
-        text = client.vision(
-            f"This is a screenshot of a {w}×{h} pixel screen. "
-            f"Locate the UI element: '{description}'. "
-            f"Reply ONLY with center coordinates as: x,y — or NOT_FOUND",
-            image_b64=b64,
-            mime="image/png",
-        )
-
-        if "NOT_FOUND" in text.upper():
-            return None
-        match = re.search(r"(\d+)\s*,\s*(\d+)", text)
-        if match:
-            return int(match.group(1)), int(match.group(2))
+        from actions.agent_desktop import get_agent_desktop
+        ad = get_agent_desktop()
+        res = ad.find(description, app=app)
+        if res.get("ok"):
+            data = res.get("data", {})
+            elements = data.get("elements", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            if elements:
+                return elements[0]
     except Exception as e:
-        print(f"[ComputerControl] ⚠️ screen_find failed: {e}")
+        print(f"[ComputerControl] [!WARN] agent-desktop find failed: {e}")
     return None
 
 def computer_control(
@@ -377,7 +372,7 @@ def computer_control(
     if player:
         player.write_log(f"[Computer] {action}")
 
-    print(f"[ComputerControl] ▶ {action}  {params}")
+    print(f"[ComputerControl] > {action}  {params}")
 
     try:
 
@@ -432,17 +427,42 @@ def computer_control(
             return _screenshot(params.get("path"))
 
         if action == "screen_find":
-            coords = _screen_find(params.get("description", ""))
-            return f"{coords[0]},{coords[1]}" if coords else "NOT_FOUND"
+            el = _screen_find(params.get("description", ""), app=params.get("app"))
+            if el:
+                ref = el.get("ref", "")
+                role = el.get("role", "")
+                name = el.get("name", "")
+                return f"FOUND: ref={ref}, role={role}, name={name}"
+            return "NOT_FOUND"
 
         if action == "screen_click":
-            desc   = params.get("description", "")
-            coords = _screen_find(desc)
-            if coords:
-                time.sleep(0.2)
-                _click(x=coords[0], y=coords[1])
-                return f"Clicked '{desc}' at {coords}"
+            desc = params.get("description", "")
+            app  = params.get("app")
+            el   = _screen_find(desc, app=app)
+            if el and el.get("ref"):
+                ref = el["ref"]
+                from actions.agent_desktop import get_agent_desktop
+                ad = get_agent_desktop()
+                res = ad.click(ref, headed=params.get("headed", False))
+                if res.get("ok"):
+                    return f"Clicked '{desc}' (ref: {ref})"
+                return f"Click on '{desc}' (ref: {ref}) failed: {res.get('error', {}).get('message')}"
             return f"Element not found on screen: '{desc}'"
+
+        if action in ("agent_desktop", "snapshot", "find_element", "click_ref", "type_ref", "agent_launch", "list_apps", "list_windows"):
+            from actions.agent_desktop import agent_desktop_control
+            ad_action_map = {
+                "snapshot": "snapshot",
+                "find_element": "find",
+                "click_ref": "click",
+                "type_ref": "type",
+                "agent_launch": "launch",
+                "list_apps": "list_apps",
+                "list_windows": "list_windows",
+            }
+            ad_params = dict(params)
+            ad_params["action"] = ad_action_map.get(action, params.get("sub_action", action))
+            return agent_desktop_control(ad_params, player=player)
 
         if action == "wait":
             secs = float(params.get("seconds", 1.0))
@@ -459,7 +479,7 @@ def computer_control(
         if action == "random_data":
             dt     = params.get("type", "name")
             result = _random_data(dt)
-            print(f"[ComputerControl] 🎲 random {dt} → {result}")
+            print(f"[ComputerControl] [rand] {dt} -> {result}")
             return result
 
         if action == "user_data":
@@ -468,11 +488,11 @@ def computer_control(
             value   = profile.get(field, "")
             if not value:
                 value = _random_data(field)
-                print(f"[ComputerControl] ⚠️ No '{field}' in memory, using random: {value}")
+                print(f"[ComputerControl] [!WARN] No '{field}' in memory, using random: {value}")
             return value
 
         return f"Unknown action: '{action}'"
 
     except Exception as e:
-        print(f"[ComputerControl] ❌ {action}: {e}")
+        print(f"[ComputerControl] [ERR] {action}: {e}")
         return f"computer_control '{action}' failed: {e}"

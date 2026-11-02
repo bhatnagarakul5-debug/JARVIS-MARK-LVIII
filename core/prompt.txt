@@ -160,3 +160,4 @@ TOOL SELECTION:
   * Instant PDF Export: "export this presentation to PDF", "convert my slides to PDF".
   * Rehearsal Speech Guide: "generate a speaker script for my presentation", "give me notes on what to say for each slide", "rehearse my presentation".
   * Visual Retheming: "retheme my presentation to obsidian gold", "make this deck silicon minimalist", "switch presentation theme".
+- agent_desktop → when user asks to operate, automate, inspect, or click elements in desktop applications via UI automation (e.g. "click Save in Notepad", "type hello into search", "snapshot active window", "launch calculator", "inspect the UI tree"). Uses deterministic Windows UI Automation without screenshot guessing.

@@ -40,6 +40,7 @@ from actions.code_helper       import code_helper
 from actions.dev_agent         import dev_agent
 from actions.web_search        import web_search as web_search_action
 from actions.computer_control  import computer_control
+from actions.agent_desktop     import agent_desktop_control
 from actions.game_updater      import game_updater
 from actions.self_edit         import self_edit
 from actions.spotify_control   import spotify_control
@@ -400,15 +401,33 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "desktop_control",
-        "description": "Controls the desktop: wallpaper, organize, clean, list, stats.",
+        "description": "Controls the desktop: wallpaper, organize, clean, list, stats, or GUI agent actions.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action": {"type": "STRING", "description": "wallpaper | wallpaper_url | organize | clean | list | stats | task"},
+                "action": {"type": "STRING", "description": "wallpaper | wallpaper_url | organize | clean | list | stats | task | find | click | type | launch"},
                 "path":   {"type": "STRING", "description": "Image path for wallpaper"},
                 "url":    {"type": "STRING", "description": "Image URL for wallpaper_url"},
                 "mode":   {"type": "STRING", "description": "by_type or by_date for organize"},
                 "task":   {"type": "STRING", "description": "Natural language desktop task"},
+                "target": {"type": "STRING", "description": "Target element name or ref"},
+                "app":    {"type": "STRING", "description": "Target application name"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "agent_desktop",
+        "description": "Native OS desktop GUI automation via accessibility tree (UI Automation). Inspects active window elements, finds buttons/inputs by name, clicks, types, launches apps, and manages windows without screenshot guessing.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "snapshot | find | click | type | press | focus_window | launch | list_apps | list_windows | scroll | status"},
+                "target": {"type": "STRING", "description": "Element name, query, or @ref ID (e.g. '@e3' or 'Save')"},
+                "app":    {"type": "STRING", "description": "Application name or window title to target"},
+                "text":   {"type": "STRING", "description": "Text to type into element"},
+                "keys":   {"type": "STRING", "description": "Key or hotkey combo for press (e.g. 'ctrl+s', 'return')"},
+                "headed": {"type": "BOOLEAN", "description": "Move physical cursor to element if true"}
             },
             "required": ["action"]
         }
@@ -1425,27 +1444,6 @@ TOOL_DECLARATIONS = [
             "required": ["action"]
         }
     },
-    {
-        "name": "voice_switcher",
-        "description": (
-            "Switches JARVIS's voice between Charon (Default Gemini Live voice) "
-            "and Ultron (Voice ID: 5HUn8o1WOpG7RxvghslS)."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action": {
-                    "type": "STRING",
-                    "description": "Action to perform: 'switch', 'list', or 'current'"
-                },
-                "voice": {
-                    "type": "STRING",
-                    "description": "Target voice: 'ultron' (5HUn8o1WOpG7RxvghslS) or 'charon'"
-                }
-            },
-            "required": ["action"]
-        }
-    },
 ]
 
 
@@ -1462,15 +1460,6 @@ class JarvisLive:
         self._speaking_lock = threading.Lock()
         self.ui.on_text_command = self._on_text_command
         self.ui.on_model_switch = self._on_model_switch
-        from core.voice_engine import get_voice_engine
-        get_voice_engine().set_reconnect_callback(self._on_voice_reconnect)
-
-    def _on_voice_reconnect(self):
-        if self._loop and self.session:
-            try:
-                asyncio.run_coroutine_threadsafe(self.session.close(), self._loop)
-            except Exception:
-                pass
 
     def _on_model_switch(self, new_model: str):
         global LIVE_MODEL
@@ -1530,26 +1519,6 @@ class JarvisLive:
             self.speak("Privacy veil dismissed, sir.")
             return
 
-        # 2c. Check for Voice Switcher Commands (Charon vs Ultron 5HUn8o1WOpG7RxvghslS)
-        if any(cmd_low.startswith(pfx) for pfx in [
-            "switch voice", "change voice", "set voice", "voice switch", "switch to voice",
-            "ultron voice", "activate ultron", "switch to ultron", "ultron mode",
-            "switch to jarvis", "switch to charon", "restore jarvis"
-        ]):
-            target = "ultron" if ("ultron" in cmd_low or "5hun8o1wopg7rxvghsls" in cmd_low) else "charon"
-            from actions.voice_switcher import voice_switcher_control
-            res = voice_switcher_control({"action": "switch", "voice": target}, player=self.ui)
-            if target == "charon":
-                self.speak(res)
-            return
-
-        if cmd_low in ["list voices", "show voices", "get voices", "available voices"]:
-            from actions.voice_switcher import voice_switcher_control
-            res = voice_switcher_control({"action": "list"}, player=self.ui)
-            self.ui.write_log(f"VOICE: {res}")
-            self.speak("Available voices are Charon and Ultron.")
-            return
-
         # 3. Check for 3-Digit Destructive Confirmation Code
         if cmd_clean.isdigit() and len(cmd_clean) == 3:
             guard = get_destructive_action_guard()
@@ -1582,16 +1551,12 @@ class JarvisLive:
         # Background evaluate emotional attunement & contextual reactions on text command
         def _eval_text_spectrum(u_txt, ui_handle):
             try:
-                from core.voice_engine import get_voice_engine
-                if get_voice_engine().active_engine == "ultron":
-                    ui_handle.set_emotion("ULTRON_PRIME", "#ff1e1e")
-                else:
-                    eng = get_emotional_spectrum()
-                    new_st = eng.evaluate_turn(u_txt)
-                    if new_st:
-                        meta = eng.get_state_metadata(new_st)
-                        ui_handle.set_emotion(new_st, meta["aura_color"])
-                        ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
+                eng = get_emotional_spectrum()
+                new_st = eng.evaluate_turn(u_txt)
+                if new_st:
+                    meta = eng.get_state_metadata(new_st)
+                    ui_handle.set_emotion(new_st, meta["aura_color"])
+                    ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
 
                 r_eng = get_human_reactions_engine()
                 react = r_eng.evaluate_contextual_reaction(u_txt)
@@ -1620,14 +1585,6 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
 
     def speak(self, text: str):
-        if not text or not str(text).strip():
-            return
-        from core.voice_engine import get_voice_engine
-        ve = get_voice_engine()
-        if ve.active_engine == "ultron":
-            ve.speak_ultron(str(text), player=self.ui)
-            return
-
         if not self._loop or not self.session:
             return
         asyncio.run_coroutine_threadsafe(
@@ -1652,25 +1609,22 @@ class JarvisLive:
 
         # Load user settings
         settings_path = BASE_DIR / "config" / "jarvis_settings.json"
-        from core.voice_engine import get_voice_engine
-        ve = get_voice_engine()
-        ve.load_settings()
-        voice_name = ve.active_gemini_voice or "Charon"
+        voice_name = "Charon"
         settings_ctx = ""
         try:
             if settings_path.exists():
                 settings = json.loads(settings_path.read_text(encoding="utf-8"))
+                voice_name = settings.get("voice_name", "Charon")
+                if not voice_name or voice_name.lower() in ("default", "none"):
+                    voice_name = "Charon"
                 user_name = settings.get("user_name", "")
                 addr = settings.get("address_style", "sir")
                 personality = settings.get("personality", "professional")
-                active_eng = ve.active_engine
-                active_v_display = f"Ultron ({ve.ultron_voice_id})" if active_eng == "ultron" else voice_name
                 settings_ctx = (
                     f"[USER PREFERENCES]\n"
                     f"User's name: {user_name}\n"
                     f"Address them as: {addr}\n"
                     f"Personality mode: {personality}\n"
-                    f"Active Voice: {active_v_display}\n"
                     f"Default browser: {settings.get('default_browser', 'chrome')}\n\n"
                 )
         except Exception:
@@ -1846,6 +1800,10 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: computer_control(parameters=args, player=self.ui))
                 result = r or "Done."
 
+            elif name == "agent_desktop":
+                r = await loop.run_in_executor(None, lambda: agent_desktop_control(parameters=args, player=self.ui))
+                result = r or "Done."
+
             elif name == "game_updater":
                 r = await loop.run_in_executor(None, lambda: game_updater(parameters=args, player=self.ui, speak=self.speak))
                 result = r or "Done."
@@ -2008,11 +1966,6 @@ class JarvisLive:
             elif name == "voice_macros":
                 r = await loop.run_in_executor(None, lambda: execute_voice_macro(parameters=args, player=self.ui))
                 result = r or "Voice macro executed."
-
-            elif name == "voice_switcher":
-                from actions.voice_switcher import voice_switcher_control
-                r = await loop.run_in_executor(None, lambda: voice_switcher_control(parameters=args, player=self.ui))
-                result = r or "Voice switch executed."
 
             elif name == "remote_bridge":
                 r = await loop.run_in_executor(None, lambda: remote_bridge_control(parameters=args, player=self.ui))
@@ -2198,16 +2151,10 @@ class JarvisLive:
                 async for response in self.session.receive():
 
                     if response.data:
-                        from core.voice_engine import get_voice_engine
-                        if get_voice_engine().active_engine == "gemini_live":
-                            self.audio_in_queue.put_nowait(response.data)
+                        self.audio_in_queue.put_nowait(response.data)
 
                     if response.server_content:
                         sc = response.server_content
-
-                        if getattr(sc, "interrupted", False):
-                            from core.voice_engine import get_voice_engine
-                            get_voice_engine().stop()
 
                         if sc.output_transcription and sc.output_transcription.text:
                             self.set_speaking(True)
@@ -2231,9 +2178,6 @@ class JarvisLive:
                             full_out = " ".join(out_buf).strip()
                             if full_out:
                                 self.ui.write_log(f"Jarvis: {full_out}")
-                                from core.voice_engine import get_voice_engine
-                                if get_voice_engine().active_engine == "ultron":
-                                    get_voice_engine().speak_ultron(full_out, player=self.ui)
                             out_buf = []
 
                             try:
@@ -2255,16 +2199,12 @@ class JarvisLive:
 
                                 def _eval_spectrum(u_txt, j_txt, ui_handle):
                                     try:
-                                        from core.voice_engine import get_voice_engine
-                                        if get_voice_engine().active_engine == "ultron":
-                                            ui_handle.set_emotion("ULTRON_PRIME", "#ff1e1e")
-                                        else:
-                                            eng = get_emotional_spectrum()
-                                            new_st = eng.evaluate_turn(u_txt, j_txt)
-                                            if new_st:
-                                                meta = eng.get_state_metadata(new_st)
-                                                ui_handle.set_emotion(new_st, meta["aura_color"])
-                                                ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
+                                        eng = get_emotional_spectrum()
+                                        new_st = eng.evaluate_turn(u_txt, j_txt)
+                                        if new_st:
+                                            meta = eng.get_state_metadata(new_st)
+                                            ui_handle.set_emotion(new_st, meta["aura_color"])
+                                            ui_handle.write_log(f"SPECTRUM: Auto-attuned to {new_st} ({meta['tagline']})")
 
                                         r_eng = get_human_reactions_engine()
                                         react = r_eng.evaluate_contextual_reaction(u_txt)
@@ -2453,18 +2393,12 @@ def main():
     for r in reports:
         ui.write_log(f"HW: {r}")
 
-    # Initialize emotional spectrum state or Ultron Crimson HUD on UI
+    # Initialize emotional spectrum state on UI
     try:
-        from core.voice_engine import get_voice_engine
-        ve = get_voice_engine()
-        if ve.active_engine == "ultron":
-            ui.set_emotion("ULTRON_PRIME", "#ff1e1e")
-            ui.write_log(f"ULTRON PRIME: ONLINE — Voice ID {ve.ultron_voice_id} | Crimson HUD Active.")
-        else:
-            eng = get_emotional_spectrum()
-            meta = eng.get_state_metadata()
-            ui.set_emotion(eng.current_state, meta["aura_color"])
-            ui.write_log(f"SPECTRUM: Initialized to {eng.current_state} ({meta['tagline']}).")
+        eng = get_emotional_spectrum()
+        meta = eng.get_state_metadata()
+        ui.set_emotion(eng.current_state, meta["aura_color"])
+        ui.write_log(f"SPECTRUM: Initialized to {eng.current_state} ({meta['tagline']}).")
     except Exception as e:
         print(f"[EmotionalSpectrum] UI init warning: {e}")
 
